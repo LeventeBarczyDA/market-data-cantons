@@ -1,0 +1,38 @@
+module Main where
+
+import Daml.Script
+
+import License.Service
+
+
+setup : Script ()
+setup = script do
+-- user_setup_begin
+  provider <- allocatePartyWithHint "Moodys" (PartyIdHint "Moodys")
+  consumer1 <- allocatePartyWithHint "GS" (PartyIdHint "GS")
+  consumer2 <- allocatePartyWithHint "BAML" (PartyIdHint "BAML")
+
+  aliceId <- validateUserId "alice@moodys"
+  bobId <- validateUserId "bob@gs"
+  charlieId <- validateUserId "charlie@baml"
+  createUser (User aliceId (Some provider)) [CanActAs provider]
+  createUser (User bobId (Some consumer1)) [CanActAs consumer1]
+  createUser (User charlieId (Some consumer2)) [CanActAs consumer2]
+-- user_setup_end
+
+  proposal <- submit provider $ createCmd LicenseProposal 
+    with 
+      provider = provider
+      consumer = consumer1
+      metrics = ["LGD", "PD", "Spread"]
+      fees = 2.00
+  
+  license <- submit consumer1 $ exerciseCmd proposal AcceptLicense 
+
+  requests <- submit consumer1 $ exerciseCmd license RequestMarketData 
+    with 
+      referenceEntities = ["SmallCo1", "SmallCo2"]
+      optMetrics = Some ["LGD", "PD"]
+
+
+  return ()

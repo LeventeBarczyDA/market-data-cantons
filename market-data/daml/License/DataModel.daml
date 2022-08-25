@@ -1,0 +1,17 @@
+module License.DataModel where 
+
+import Daml.Script
+import DA.Assert
+
+type MetricLabel = Text
+type Fees = Decimal 
+
+type ReferenceEntity = Text
+type MarketData = Decimal 
+
+intersect: Eq a =>  [a] -> [a] -> [a] 
+intersect left right = filter (`elem` right) left
+
+testIntersect: Script () 
+testIntersect = script do 
+  intersect [1, 2, 3, 4, 5] [2,4,6] === [2,4]

@@ -1,0 +1,120 @@
+module License.Service where 
+
+import DA.List ((\\), dedup, unique)
+
+import License.DataModel
+import License.MarketData
+
+template LicenseProposal 
+  with 
+    provider: Party 
+    consumer: Party 
+
+    metrics: [MetricLabel]
+    fees: Fees 
+  where 
+    signatory provider 
+    observer consumer 
+
+    choice AcceptLicense: ContractId License 
+      controller consumer 
+      do 
+        create License 
+          with 
+            requestCounter = 0
+            ..
+
+template License 
+  with 
+    provider: Party
+    consumer: Party 
+
+    metrics: [MetricLabel]
+    fees: Fees
+
+    requestCounter: Int
+  where 
+    signatory provider, consumer 
+    ensure unique metrics
+
+    key (provider, consumer): (Party, Party)
+    maintainer key._1 
+
+    choice UpdateMetrics: ContractId License 
+      with 
+        newMetrics: [MetricLabel]
+        removeMetrics: [MetricLabel]
+        newFees: Fees
+      controller consumer, provider 
+      do 
+        create this 
+          with 
+            metrics = dedup $ metrics ++ newMetrics \\ removeMetrics
+            fees = newFees
+
+    nonconsuming choice RequestNewMetrics: ContractId UpdateMetricsRequest
+      with 
+        newMetrics: [MetricLabel]
+        removeMetrics: [MetricLabel]
+      controller consumer 
+      do 
+        create UpdateMetricsRequest with .. 
+
+    choice RequestMarketData: (ContractId License, [ContractId MarketDataRequest])
+      with 
+        referenceEntities: [ReferenceEntity]
+        optMetrics: Optional [MetricLabel]
+      controller consumer 
+      do 
+        requested <- getTime 
+        let 
+          counter = requestCounter
+          cost = fees
+          metricLabels = case optMetrics of 
+            None -> metrics
+            Some requestMetrics -> metrics `intersect` requestMetrics
+        marketDataRequests <- mapA (\referenceEntity -> mapA (\metric -> 
+            create MarketDataRequest with ..) referenceEntities ) metricLabels
+
+        next <- create this with requestCounter = requestCounter + 1 
+
+        return (next, concat marketDataRequests)
+
+template UpdateMetricsRequest 
+  with 
+    provider: Party 
+    consumer: Party 
+
+    newMetrics: [MetricLabel]
+    removeMetrics: [MetricLabel]
+  where 
+    signatory consumer 
+    observer provider 
+
+    choice ProvideQuote: ContractId UpdateMetricsQuote
+      with 
+        newFees: Fees 
+      controller provider 
+      do 
+        create UpdateMetricsQuote with ..
+
+template UpdateMetricsQuote 
+  with 
+    provider: Party 
+    consumer: Party 
+
+    newMetrics: [MetricLabel]
+    removeMetrics: [MetricLabel]
+
+    newFees: Fees 
+  where 
+    signatory consumer, provider 
+
+    choice AcceptFees: ContractId License 
+      controller consumer 
+      do 
+        exerciseByKey @License (provider, consumer) UpdateMetrics with ..
+
+    choice RejectFees: ()
+      controller consumer 
+      do pure ()

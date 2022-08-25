@@ -1,0 +1,69 @@
+module License.MarketData where 
+
+import License.DataModel 
+
+template MarketDataRequest 
+  with 
+    provider: Party
+    consumer: Party 
+
+    metric: MetricLabel 
+    referenceEntity: ReferenceEntity 
+
+    requested: Time 
+    counter: Int
+
+    cost: Decimal
+  where 
+    signatory provider, consumer 
+
+    choice ProvideMarketData: ContractId ProvidedMarketData 
+      with 
+        marketData: MarketData 
+      controller provider 
+      do 
+        provided <- getTime 
+        create ProvidedMarketData with ..
+
+    choice ReturnUnknown: ContractId UnknownMarketData 
+      with 
+        reason: Text 
+      controller provider 
+      do 
+        provided <- getTime 
+        create UnknownMarketData with ..
+
+template ProvidedMarketData 
+  with 
+    provider: Party 
+    consumer: Party 
+
+    metric: MetricLabel 
+    referenceEntity: ReferenceEntity 
+
+    requested: Time 
+    counter: Int 
+
+    marketData: MarketData 
+    provided: Time 
+
+    cost: Decimal
+  where 
+    signatory consumer, provider
+
+template UnknownMarketData 
+  with 
+    provider: Party 
+    consumer: Party 
+
+    metric: MetricLabel 
+    referenceEntity: ReferenceEntity 
+
+    requested: Time 
+
+    counter: Int 
+
+    reason: Text
+    provided: Time 
+  where 
+    signatory consumer, provider
